@@ -8,7 +8,7 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_rgb.h"
 
-// 🟢 Letzte gerenderte Farbe (für Logging)
+
 uint16_t last_render_color = 0;
 
 
@@ -17,66 +17,38 @@ static const char *TAG = "DISPLAY";
 #define FB_PIXELS (DISPLAY_WIDTH * DISPLAY_HEIGHT)
 #define FB_BYTES  (FB_PIXELS * sizeof(uint16_t))
 
-static uint16_t *fb_front  = NULL;
-static uint16_t *fb_back   = NULL;
-static uint16_t *fb_render = NULL;
+// Treiber-interne FBs (liegen in PSRAM, gehören dem RGB-Treiber)
+static uint16_t *s_fbs[2] = { NULL, NULL };
+static int s_current_fb = 0;
 
 static esp_lcd_panel_handle_t lcd_panel = NULL;
 
-// ---------------------------------------------------------
-// Framebuffer
-// ---------------------------------------------------------
-static esp_err_t fb_init(void)
-{
-    fb_front  = heap_caps_malloc(FB_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    fb_back   = heap_caps_malloc(FB_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    fb_render = heap_caps_malloc(FB_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
-    if (!fb_front || !fb_back || !fb_render) {
-        ESP_LOGE(TAG, "FB alloc failed");
-        return ESP_ERR_NO_MEM;
-    }
-
-    memset(fb_front,  0, FB_BYTES);
-    memset(fb_back,   0, FB_BYTES);
-    memset(fb_render, 0, FB_BYTES);
-
-    ESP_LOGI(TAG, "Triple FB initialized: front=%p back=%p render=%p",
-             fb_front, fb_back, fb_render);
-    return ESP_OK;
-}
-
 uint16_t *display_get_render_fb(void)
 {
-    return fb_render;
+    // vorerst: immer in fb0 rendern
+    return s_fbs[0];
 }
 
 esp_err_t display_swap_and_present(void)
 {
-    uint16_t *tmp = fb_front;
-    fb_front  = fb_render;
-    fb_render = fb_back;
-    fb_back   = tmp;
+    uint16_t *fb = display_get_render_fb();
 
-    ESP_LOGI(TAG, "Presenting FB %p", fb_front);
-
-    return esp_lcd_panel_draw_bitmap(
+    esp_err_t err = esp_lcd_panel_draw_bitmap(
         lcd_panel,
         0, 0,
         DISPLAY_WIDTH,
         DISPLAY_HEIGHT,
-        fb_front
+        fb
     );
+
+    // kein eigenes Flippen, Treiber macht intern sein Ding
+    return err;
 }
 
-// ---------------------------------------------------------
-// Display Init
-// ---------------------------------------------------------
+
 esp_err_t display_init(void)
 {
     ESP_LOGI(TAG, "Init RGB panel (%s)", BOARD_NAME);
-
-    ESP_ERROR_CHECK(fb_init());
 
     esp_lcd_rgb_panel_config_t cfg = {
         .clk_src = ST7262_PANEL_CONFIG_CLK_SRC,
@@ -105,7 +77,8 @@ esp_err_t display_init(void)
 
         .data_width        = ST7262_PANEL_CONFIG_DATA_WIDTH,
         .bits_per_pixel    = 16,
-        .num_fbs           = 1,
+
+        .num_fbs           = 2,   // zwei interne FBs
         .bounce_buffer_size_px = 0,
         .sram_trans_align  = ST7262_PANEL_CONFIG_SRAM_TRANS_ALIGN,
         .psram_trans_align = ST7262_PANEL_CONFIG_PSRAM_TRANS_ALIGN,
@@ -129,8 +102,8 @@ esp_err_t display_init(void)
         },
 
         .flags = {
-            .fb_in_psram = ST7262_PANEL_CONFIG_FLAGS_FB_IN_PSRAM,
-            .double_fb   = false,
+            .fb_in_psram = true,   // 🔴 wichtig: FBs in PSRAM
+            .double_fb   = true,   // 🔴 Treiber macht Double-Buffering
         },
     };
 
@@ -138,9 +111,16 @@ esp_err_t display_init(void)
     ESP_ERROR_CHECK(esp_lcd_panel_reset(lcd_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_init(lcd_panel));
 
+    // interne FB-Pointer vom Treiber holen
+    ESP_ERROR_CHECK(
+        esp_lcd_rgb_panel_get_frame_buffer(lcd_panel, 2, (void **)s_fbs)
+    );
+
+    ESP_LOGI(TAG, "Driver FBs: fb0=%p fb1=%p", s_fbs[0], s_fbs[1]);
+
     gpio_set_direction(DISPLAY_BCKL, GPIO_MODE_OUTPUT);
     gpio_set_level(DISPLAY_BCKL, 1);
 
-    ESP_LOGI(TAG, "RGB Panel ready with stable timings");
+    ESP_LOGI(TAG, "RGB Panel ready with driver-owned double FB");
     return ESP_OK;
 }
