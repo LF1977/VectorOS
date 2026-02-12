@@ -82,30 +82,30 @@ esp_err_t display_init(void)
         .clk_src = ST7262_PANEL_CONFIG_CLK_SRC,
 
         .timings = {
-            .pclk_hz = 14 * 1000000,   // Demo: 14 MHz PCLK
-            .h_res   = DISPLAY_WIDTH,
-            .v_res   = DISPLAY_HEIGHT,
+            .pclk_hz = ST7262_PANEL_CONFIG_TIMINGS_PCLK_HZ,
+            .h_res   = ST7262_PANEL_CONFIG_TIMINGS_H_RES,
+            .v_res   = ST7262_PANEL_CONFIG_TIMINGS_V_RES,
 
-            .hsync_pulse_width = 4,
-            .hsync_back_porch  = 8,
-            .hsync_front_porch = 8,
+            .hsync_pulse_width = ST7262_PANEL_CONFIG_TIMINGS_HSYNC_PULSE_WIDTH,
+            .hsync_back_porch  = ST7262_PANEL_CONFIG_TIMINGS_HSYNC_BACK_PORCH,
+            .hsync_front_porch = ST7262_PANEL_CONFIG_TIMINGS_HSYNC_FRONT_PORCH,
 
-            .vsync_pulse_width = 4,
-            .vsync_back_porch  = 8,
-            .vsync_front_porch = 8,
+            .vsync_pulse_width = ST7262_PANEL_CONFIG_TIMINGS_VSYNC_PULSE_WIDTH,
+            .vsync_back_porch  = ST7262_PANEL_CONFIG_TIMINGS_VSYNC_BACK_PORCH,
+            .vsync_front_porch = ST7262_PANEL_CONFIG_TIMINGS_VSYNC_FRONT_PORCH,
 
             .flags = {
-                .hsync_idle_low  = true,
-                .vsync_idle_low  = true,
-                .de_idle_high    = true,
-                .pclk_active_neg = true,   // falling edge
-                .pclk_idle_high  = false,
+                .hsync_idle_low  = ST7262_PANEL_CONFIG_TIMINGS_FLAGS_HSYNC_IDLE_LOW,
+                .vsync_idle_low  = ST7262_PANEL_CONFIG_TIMINGS_FLAGS_VSYNC_IDLE_LOW,
+                .de_idle_high    = ST7262_PANEL_CONFIG_TIMINGS_FLAGS_DE_IDLE_HIGH,
+                .pclk_active_neg = ST7262_PANEL_CONFIG_TIMINGS_FLAGS_PCLK_ACTIVE_NEG,
+                .pclk_idle_high  = ST7262_PANEL_CONFIG_TIMINGS_FLAGS_PCLK_IDLE_HIGH,
             },
         },
 
-        .data_width        = 16,
+        .data_width        = ST7262_PANEL_CONFIG_DATA_WIDTH,
         .bits_per_pixel    = 16,
-        .num_fbs           = 1,          // Wir nutzen unsere eigenen 3 FB
+        .num_fbs           = 1,
         .bounce_buffer_size_px = 0,
         .sram_trans_align  = ST7262_PANEL_CONFIG_SRAM_TRANS_ALIGN,
         .psram_trans_align = ST7262_PANEL_CONFIG_PSRAM_TRANS_ALIGN,
@@ -138,12 +138,9 @@ esp_err_t display_init(void)
     ESP_ERROR_CHECK(esp_lcd_panel_reset(lcd_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_init(lcd_panel));
 
-    // RGB-Panels unterstützen disp_on_off NICHT
-    // ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(lcd_panel, true));
-
     gpio_set_direction(DISPLAY_BCKL, GPIO_MODE_OUTPUT);
     gpio_set_level(DISPLAY_BCKL, 1);
 
-    ESP_LOGI(TAG, "RGB Panel ready with demo timings (14MHz, DE/HSYNC/VSYNC correctly set)");
+    ESP_LOGI(TAG, "RGB Panel ready with stable timings");
     return ESP_OK;
 }
